@@ -42,11 +42,11 @@ from utils.helper import weights_init
 import csv
 
 class DP_WGAN:
-    def __init__(self, logfile, input_dim, z_dim, target_epsilon, target_delta, conditional=True):
+    def __init__(self,leaky, logfile, input_dim, z_dim, target_epsilon, target_delta, conditional=True):
         self.input_dim = input_dim
         self.z_dim = z_dim
-        self.generator = Generator(z_dim, input_dim, conditional).cuda().double()
-        self.discriminator = Discriminator(input_dim, wasserstein=True).cuda().double()
+        self.generator = Generator(z_dim, input_dim, conditional, leaky).cuda().double()
+        self.discriminator = Discriminator(input_dim, leaky, wasserstein=True).cuda().double()
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
         self.target_epsilon = target_epsilon

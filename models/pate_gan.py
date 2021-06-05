@@ -24,10 +24,10 @@ from utils.helper import weights_init, pate, moments_acc
 import csv
 
 class PATE_GAN:
-    def __init__(self, logfile, input_dim, z_dim, num_teachers, target_epsilon, target_delta, conditional=True):
-        self.generator = Generator(z_dim, input_dim, conditional).cuda().double()
-        self.student_disc = Discriminator(input_dim, wasserstein=False).cuda().double()
-        self.teacher_disc = [Discriminator(input_dim, wasserstein=False).cuda().double()
+    def __init__(self, leaky, logfile, input_dim, z_dim, num_teachers, target_epsilon, target_delta, conditional=True):
+        self.generator = Generator(z_dim, input_dim, conditional, leaky).cuda().double()
+        self.student_disc = Discriminator(input_dim, leaky, wasserstein=False).cuda().double()
+        self.teacher_disc = [Discriminator(input_dim, leaky, wasserstein=False).cuda().double()
                              for _ in range(num_teachers)]
         self.generator.apply(weights_init)
         self.student_disc.apply(weights_init)

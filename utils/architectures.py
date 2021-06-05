@@ -17,7 +17,7 @@ import torch.nn as nn
 
 
 class Generator(nn.Module):
-    def __init__(self, latent_size, output_size, conditional=True):
+    def __init__(self, latent_size, output_size, conditional=True, leaky=False):
         super().__init__()
         z = latent_size
         d = output_size
@@ -25,9 +25,11 @@ class Generator(nn.Module):
             z = z + 1
         else:
             d = d + 1
+        if leaky: actfn = nn.LeakyReLU()
+        else: actfn = nn.ReLU()
         self.main = nn.Sequential(
             nn.Linear(z, 2 * latent_size),
-            nn.ReLU(),
+            actfn,
             nn.Linear(2 * latent_size, d))
 
     def forward(self, x):
@@ -35,11 +37,14 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_size, wasserstein=False):
+    def __init__(self, input_size, leaky=False, wasserstein=False):
         super().__init__()
+        if leaky: actfn = nn.LeakyReLU()
+        else: actfn = nn.ReLU()
+
         self.main = nn.Sequential(
             nn.Linear(input_size + 1, int(input_size / 2)),
-            nn.ReLU(),
+            actfn,
             nn.Linear(int(input_size / 2), 1))
 
         if not wasserstein:
