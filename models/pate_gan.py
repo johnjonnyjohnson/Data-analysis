@@ -42,7 +42,7 @@ class PATE_GAN:
         self.logfile = logfile # Should be a path to a csv file!
 
     def train(self, x_train, y_train, hyperparams):
-        csvfile = open(self.logfile)
+        csvfile = open(self.logfile, 'w')
         csvwriter = csv.writer(csvfile, delimiter=',')
 
         batch_size = hyperparams.batch_size
