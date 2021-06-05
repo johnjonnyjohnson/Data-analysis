@@ -21,10 +21,10 @@ import numpy as np
 import math
 from utils.architectures import Generator, Discriminator
 from utils.helper import weights_init, pate, moments_acc
-
+import csv
 
 class PATE_GAN:
-    def __init__(self, input_dim, z_dim, num_teachers, target_epsilon, target_delta, conditional=True):
+    def __init__(self, logfile, input_dim, z_dim, num_teachers, target_epsilon, target_delta, conditional=True):
         self.generator = Generator(z_dim, input_dim, conditional).cuda().double()
         self.student_disc = Discriminator(input_dim, wasserstein=False).cuda().double()
         self.teacher_disc = [Discriminator(input_dim, wasserstein=False).cuda().double()
@@ -39,8 +39,12 @@ class PATE_GAN:
         self.target_epsilon = target_epsilon
         self.target_delta = target_delta
         self.conditional = conditional
+        self.logfile = logfile # Should be a path to a csv file!
 
     def train(self, x_train, y_train, hyperparams):
+        csvfile = open(self.logfile)
+        csvwriter = csv.writer(csvfile, delimiter=',')
+
         batch_size = hyperparams.batch_size
         num_teacher_iters = hyperparams.num_teacher_iters
         num_student_iters = hyperparams.num_student_iters
@@ -157,11 +161,19 @@ class PATE_GAN:
 
             # Calculate the current privacy cost
             epsilon = min((alpha - math.log(self.target_delta)) / l_list)
+            
+            # Do logging to csvfile
+            if steps % 10 == 0:
+                csvwriter.writerow([steps, err_sd.item(),err_g.item(), epsilon.item()])
             if steps % 100 == 0:
                 print("Step : ", steps, "Loss SD : ", err_sd.item(), "Loss G : ", err_g.item(), "Epsilon : ",
                       epsilon.item())
 
             steps += 1
+        
+        # End of training
+        print(f'Done training after {steps} Steps and Final epsilon of {epsilon.item()}!')
+        csvfile.close()
 
     def generate(self, num_rows, class_ratios, batch_size=1000):
         steps = num_rows // batch_size
