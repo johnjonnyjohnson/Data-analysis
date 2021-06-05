@@ -39,10 +39,10 @@ import numpy as np
 from utils.rdp_accountant import compute_rdp, get_privacy_spent
 from utils.architectures import Generator, Discriminator
 from utils.helper import weights_init
-
+import csv
 
 class DP_WGAN:
-    def __init__(self, input_dim, z_dim, target_epsilon, target_delta, conditional=True):
+    def __init__(self, logfile, input_dim, z_dim, target_epsilon, target_delta, conditional=True):
         self.input_dim = input_dim
         self.z_dim = z_dim
         self.generator = Generator(z_dim, input_dim, conditional).cuda().double()
@@ -52,8 +52,13 @@ class DP_WGAN:
         self.target_epsilon = target_epsilon
         self.target_delta = target_delta
         self.conditional = conditional
+        self.logfile = logfile # Should be a path to a csv file!
+
 
     def train(self, x_train, y_train, hyperparams, private=False):
+        csvfile = open(self.logfile, 'w')
+        csvwriter = csv.writer(csvfile, delimiter=',')
+
         batch_size = hyperparams.batch_size
         micro_batch_size = hyperparams.micro_batch_size
         lr = hyperparams.lr
@@ -179,6 +184,10 @@ class DP_WGAN:
             else:
                 if epoch > hyperparams.num_epochs:
                     epsilon = np.inf
+
+
+            # Do logging..
+            csvwriter.writerow([epoch, err_d_real.mean(0).view(1).item(),err_d_fake.item(), err_g.item(), epsilon])
 
             print("Epoch :", epoch, "Loss D real : ", err_d_real.mean(0).view(1).item(),
                   "Loss D fake : ", err_d_fake.item(), "Loss G : ", err_g.item(), "Epsilon spent : ", epsilon)
