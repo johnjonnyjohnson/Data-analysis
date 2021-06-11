@@ -18,10 +18,17 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data_utils
 import numpy as np
+import pandas as pd
 import math
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import roc_auc_score
+
+
 from utils.architectures import Generator, Discriminator
 from utils.helper import weights_init, pate, moments_acc
 import csv
+
+
 
 class PATE_GAN:
     def __init__(self, leaky, logfile, input_dim, z_dim, num_teachers, target_epsilon, target_delta, conditional=True):
@@ -41,7 +48,7 @@ class PATE_GAN:
         self.conditional = conditional
         self.logfile = logfile # Should be a path to a csv file!
 
-    def train(self, x_train, y_train, hyperparams):
+    def train(self, x_train, y_train, x_test, y_test, colnames, scaler, hyperparams):
         csvfile = open(self.logfile, 'w')
         csvwriter = csv.writer(csvfile, delimiter=',')
 
@@ -162,12 +169,29 @@ class PATE_GAN:
             # Calculate the current privacy cost
             epsilon = min((alpha - math.log(self.target_delta)) / l_list)
             
+            # This chunk to generate, save synthetic, compute ROC.
+            if steps % 10 == 0:
+                syn_data = self.generate(x_train.shape[0], class_ratios)
+                syn_x, syn_y = syn_data[:, :-1], syn_data[:, -1]
+                syn_save = scaler.inverse_transform(syn_x)
+
+                mlp = MLPClassifier((32,8), max_iter=1000, random_state=42)
+                mlp.fit(syn_x, syn_y)
+                pred_y = mlp.predict(x_test)
+
+                roc_score =  roc_auc_score(y_test, pred_y)
+
+                self.save_churn(self, syn_save, syn_y, colnames, steps, roc_score)
+
+
+
             # Do logging to csvfile
             if steps % 10 == 0:
                 csvwriter.writerow([steps, err_sd.item(),err_g.item(), epsilon.item()])
-            if steps % 100 == 0:
+            # Log to console
+            if steps % 10 == 0:
                 print("Step : ", steps, "Loss SD : ", err_sd.item(), "Loss G : ", err_g.item(), "Epsilon : ",
-                      epsilon.item())
+                      epsilon.item(), "ROC_SCORE: ", roc_score)
 
             steps += 1
         
@@ -205,3 +229,44 @@ class PATE_GAN:
             synthetic_data.append(synthetic.cpu().data.numpy())
 
         return np.concatenate(synthetic_data)
+
+
+    def update_array(self, indexes, cols = None):
+        if cols: colsize = cols
+        else: colsize = indexes.max() +1
+        b = np.zeros((indexes.size, colsize))
+        b[np.arange(indexes.size), indexes] = 1
+        return b
+        
+    def save_marketing(self, syn_save):
+    # Some fancy indexing to get the actual synthetic data..
+        accepted = np.argmax(syn_save[:,16:21], axis=1)
+        education = np.argmax(syn_save[:, 22:27], axis=1)
+        marital = np.argmax(syn_save[:, 27:34], axis=1)
+        country = np.argmax(syn_save[:, 34:], axis=1)
+
+        syn_save[:,16:21] = self.update_array(accepted, cols=5)
+        syn_save[:, 22:27] = self.update_array(education, cols=5)
+        syn_save[:, 27:34] = self.update_array(marital, cols=7)
+        syn_save[:, 34:] = self.update_array(country, cols=8)
+
+        df1 = pd.DataFrame(syn_save, columns = df.columns.drop(TARGET_VARIABLE))
+        df2 = pd.DataFrame(syn_y, columns = [TARGET_VARIABLE])
+        df_save = pd.concat([df1,df2], axis =1)
+        df_save.to_csv(f'synthetic_{MODEL_NAME}_{DATASET_NAME}_{TARGET_EPSILON}.csv')
+
+    def save_churn(self, syn_save, syn_y, colnames, step, roc_score):
+        geography = np.argmax(syn_save[:,8:11], axis=1)
+        gender = np.argmax(syn_save[:,11:], axis=1)
+        
+        syn_save[:,8:11] = self.update_array(geography, cols=3)
+        syn_save[:, 11:] = self.update_array(gender, cols=2)
+        syn_save[:,4] = np.round(syn_save[:,4]) # num products
+        syn_save[:,5] = np.round(np.clip(syn_save[:,5],0,1)) # Has card
+        syn_save[:,6] = np.round(np.clip(syn_save[:,6],0,1)) # Is active
+
+
+        df1 = pd.DataFrame(syn_save, columns = colnames)
+        df2 = pd.DataFrame(syn_y, columns = 'Exited')
+        df_save = pd.concat([df1,df2], axis =1)
+        df_save.to_csv(f'syn/synthetic_pategan_churn_{step:04}_{roc_score:.3f}.csv')
