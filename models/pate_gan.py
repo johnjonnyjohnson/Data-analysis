@@ -192,7 +192,7 @@ class PATE_GAN:
                     df1 = pd.DataFrame(syn_x, columns = colnames)
                     df2 = pd.DataFrame(syn_y, columns = ['Exited'])
                     df_save = pd.concat([df1,df2], axis =1)
-                    df_save.to_csv(f'syn/synthetic_pategan_churn_{step:04}_{roc_score:.3f}_raw.csv')
+                    df_save.to_csv(f'syn/synthetic_pategan_churn_{steps:04}_{roc_score:.3f}_raw.csv')
 
 
             # Do logging to csvfile
