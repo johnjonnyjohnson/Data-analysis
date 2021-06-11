@@ -171,7 +171,7 @@ class PATE_GAN:
             
             # This chunk to generate, save synthetic, compute ROC.
             if steps % 10 == 0:
-                syn_data = self.generate(x_train.shape[0], class_ratios)
+                syn_data = self.generate(x_train.shape[0], hyperparams.class_ratios)
                 syn_x, syn_y = syn_data[:, :-1], syn_data[:, -1]
                 syn_save = scaler.inverse_transform(syn_x)
 
