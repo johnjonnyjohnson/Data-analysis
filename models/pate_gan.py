@@ -52,6 +52,7 @@ class PATE_GAN:
         csvfile = open(self.logfile, 'w')
         csvwriter = csv.writer(csvfile, delimiter=',')
 
+        best_roc_score = 0
         batch_size = hyperparams.batch_size
         num_teacher_iters = hyperparams.num_teacher_iters
         num_student_iters = hyperparams.num_student_iters
@@ -180,14 +181,16 @@ class PATE_GAN:
                 pred_y = mlp.predict(x_test)
 
                 roc_score =  roc_auc_score(y_test, pred_y)
-
-                self.save_churn(self, syn_save, syn_y, colnames, steps, roc_score)
+                if roc_score > best_roc_score:
+                    print(f'Best Roc of {best_roc_score} found, saving....')
+                    best_roc_score = roc_score
+                    self.save_churn(syn_save, syn_y, colnames, steps, roc_score)
 
 
 
             # Do logging to csvfile
             if steps % 10 == 0:
-                csvwriter.writerow([steps, err_sd.item(),err_g.item(), epsilon.item()])
+                csvwriter.writerow([steps, err_sd.item(),err_g.item(), epsilon.item(),roc_score])
             # Log to console
             if steps % 10 == 0:
                 print("Step : ", steps, "Loss SD : ", err_sd.item(), "Loss G : ", err_g.item(), "Epsilon : ",
@@ -196,7 +199,7 @@ class PATE_GAN:
             steps += 1
         
         # End of training
-        print(f'Done training after {steps} Steps and Final epsilon of {epsilon.item()}!')
+        print(f'Done training after {steps} Steps and Final epsilon of {epsilon.item()}, achieved Top ROC score of {best_roc_score}!')
         csvfile.close()
 
     def generate(self, num_rows, class_ratios, batch_size=1000):
@@ -267,6 +270,6 @@ class PATE_GAN:
 
 
         df1 = pd.DataFrame(syn_save, columns = colnames)
-        df2 = pd.DataFrame(syn_y, columns = 'Exited')
+        df2 = pd.DataFrame(syn_y, columns = ['Exited'])
         df_save = pd.concat([df1,df2], axis =1)
         df_save.to_csv(f'syn/synthetic_pategan_churn_{step:04}_{roc_score:.3f}.csv')
