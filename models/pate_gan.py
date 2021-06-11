@@ -184,8 +184,15 @@ class PATE_GAN:
                 if roc_score > best_roc_score:
                     print(f'Best Roc of {best_roc_score} found, saving....')
                     best_roc_score = roc_score
+                    
+                    # save nice looking
                     self.save_churn(syn_save, syn_y, colnames, steps, roc_score)
 
+                    # save raw
+                    df1 = pd.DataFrame(syn_x, columns = colnames)
+                    df2 = pd.DataFrame(syn_y, columns = ['Exited'])
+                    df_save = pd.concat([df1,df2], axis =1)
+                    df_save.to_csv(f'syn/synthetic_pategan_churn_{step:04}_{roc_score:.3f}_raw.csv')
 
 
             # Do logging to csvfile
