@@ -36,6 +36,11 @@ import torch
 import torch.optim as optim
 import torch.utils.data as data_utils
 import numpy as np
+import pandas as pd
+
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import roc_auc_score
+
 from utils.rdp_accountant import compute_rdp, get_privacy_spent
 from utils.architectures import Generator, Discriminator
 from utils.helper import weights_init
@@ -55,10 +60,11 @@ class DP_WGAN:
         self.logfile = logfile # Should be a path to a csv file!
 
 
-    def train(self, x_train, y_train, hyperparams, private=False):
+    def train(self, x_train, y_train, x_test, y_test, colnames, scaler, data_name, hyperparams, private=False):
         csvfile = open(self.logfile, 'w')
         csvwriter = csv.writer(csvfile, delimiter=',')
-
+       
+        best_roc_score = 0
         batch_size = hyperparams.batch_size
         micro_batch_size = hyperparams.micro_batch_size
         lr = hyperparams.lr
@@ -186,11 +192,44 @@ class DP_WGAN:
                     epsilon = np.inf
 
 
+            # Generate data each epoch and save it.
+            syn_data = self.generate(x_train.shape[0], hyperparams.class_ratios)
+            syn_x, syn_y = syn_data[:, :-1], syn_data[:, -1]
+            syn_save = scaler.inverse_transform(syn_x)
+
+            mlp = MLPClassifier((32,8), max_iter=1000, random_state=42)
+            mlp.fit(syn_x, syn_y)
+            pred_y = mlp.predict(x_test)
+
+            roc_score =  roc_auc_score(y_test, pred_y)
+            if roc_score > best_roc_score:
+                best_roc_score = roc_score
+                print(f'Best Roc of {best_roc_score} found, saving....')
+                
+                
+                # save nice looking
+                if data_name == 'churn':
+                    target_name = 'Exited'
+                    self.save_churn(syn_save, syn_y, colnames, epoch, roc_score)
+                elif data_name == 'marketing':
+                    target_name = 'Response'
+                    self.save_marketing(syn_save, syn_y, colnames, epoch, roc_score)
+
+
+                # save raw
+                
+                df1 = pd.DataFrame(syn_x, columns = colnames)
+                df2 = pd.DataFrame(syn_y, columns = [target_name])
+                df_save = pd.concat([df1,df2], axis =1)
+                df_save.to_csv(f'syn/synthetic_dpwgan_{data_name}_{epoch:03}_{roc_score:.3f}_raw.csv')
+
+
             # Do logging..
             csvwriter.writerow([epoch, err_d_real.mean(0).view(1).item(),err_d_fake.item(), err_g.item(), epsilon])
 
             print("Epoch :", epoch, "Loss D real : ", err_d_real.mean(0).view(1).item(),
-                  "Loss D fake : ", err_d_fake.item(), "Loss G : ", err_g.item(), "Epsilon spent : ", epsilon)
+                  "Loss D fake : ", err_d_fake.item(), "Loss G : ", err_g.item(), "Epsilon spent : ", epsilon,
+                  "ROC attained: ", roc_score)
 
     def generate(self, num_rows, class_ratios, batch_size=1000):
         steps = num_rows // batch_size
@@ -221,3 +260,45 @@ class DP_WGAN:
             synthetic_data.append(synthetic.cpu().data.numpy())
 
         return np.concatenate(synthetic_data)
+
+
+    def update_array(self, indexes, cols = None):
+        if cols: colsize = cols
+        else: colsize = indexes.max() +1
+        b = np.zeros((indexes.size, colsize))
+        b[np.arange(indexes.size), indexes] = 1
+        return b
+
+    def save_churn(self, syn_save, syn_y, colnames, epoch, roc_score):
+        geography = np.argmax(syn_save[:,8:11], axis=1)
+        gender = np.argmax(syn_save[:,11:], axis=1)
+        
+        syn_save[:,8:11] = self.update_array(geography, cols=3)
+        syn_save[:, 11:] = self.update_array(gender, cols=2)
+        syn_save[:,4] = np.round(syn_save[:,4]) # num products
+        syn_save[:,5] = np.round(np.clip(syn_save[:,5],0,1)) # Has card
+        syn_save[:,6] = np.round(np.clip(syn_save[:,6],0,1)) # Is active
+
+
+        df1 = pd.DataFrame(syn_save, columns = colnames)
+        df2 = pd.DataFrame(syn_y, columns = ['Exited'])
+        df_save = pd.concat([df1,df2], axis =1)
+        df_save.to_csv(f'syn/synthetic_dpwgan_churn_{epoch:03}_{roc_score:.3f}.csv')
+
+    def save_marketing(self, syn_save, syn_y, colnames, epoch, roc_score):
+    # Some fancy indexing to get the actual synthetic data..
+        accepted = np.argmax(syn_save[:,16:21], axis=1)
+        education = np.argmax(syn_save[:, 22:27], axis=1)
+        marital = np.argmax(syn_save[:, 27:34], axis=1)
+        country = np.argmax(syn_save[:, 34:], axis=1)
+
+        syn_save[:,16:21] = self.update_array(accepted, cols=5)
+        syn_save[:, 22:27] = self.update_array(education, cols=5)
+        syn_save[:, 27:34] = self.update_array(marital, cols=7)
+        syn_save[:, 34:] = self.update_array(country, cols=8)
+
+        df1 = pd.DataFrame(syn_save, columns = colnames)
+        df2 = pd.DataFrame(syn_y, columns = ['Response'])
+        df_save = pd.concat([df1,df2], axis =1)
+        print('saving nice!')
+        df_save.to_csv(f'syn/synthetic_dpwgan_marketing_{epoch:03}_{roc_score:.3f}.csv')

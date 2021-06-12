@@ -48,7 +48,7 @@ class PATE_GAN:
         self.conditional = conditional
         self.logfile = logfile # Should be a path to a csv file!
 
-    def train(self, x_train, y_train, x_test, y_test, colnames, scaler, hyperparams):
+    def train(self, x_train, y_train, x_test, y_test, colnames, scaler, data_name, hyperparams):
         csvfile = open(self.logfile, 'w')
         csvwriter = csv.writer(csvfile, delimiter=',')
 
@@ -182,17 +182,23 @@ class PATE_GAN:
 
                 roc_score =  roc_auc_score(y_test, pred_y)
                 if roc_score > best_roc_score:
-                    print(f'Best Roc of {best_roc_score} found, saving....')
                     best_roc_score = roc_score
-                    
+                    print(f'Best Roc of {best_roc_score} found, saving....')
+
+
                     # save nice looking
-                    self.save_churn(syn_save, syn_y, colnames, steps, roc_score)
+                    if data_name == 'churn':
+                        target_name = 'Exited'
+                        self.save_churn(syn_save, syn_y, colnames, steps, roc_score)
+                    elif data_name == 'marketing':
+                        target_name = 'Response'
+                        self.save_marketing(syn_save, syn_y, colnames, steps, roc_score)
 
                     # save raw
                     df1 = pd.DataFrame(syn_x, columns = colnames)
-                    df2 = pd.DataFrame(syn_y, columns = ['Exited'])
+                    df2 = pd.DataFrame(syn_y, columns = [target_name])
                     df_save = pd.concat([df1,df2], axis =1)
-                    df_save.to_csv(f'syn/synthetic_pategan_churn_{steps:04}_{roc_score:.3f}_raw.csv')
+                    df_save.to_csv(f'syn/synthetic_pategan_{data_name}_{steps:04}_{roc_score:.3f}_raw.csv')
 
 
             # Do logging to csvfile
@@ -248,7 +254,7 @@ class PATE_GAN:
         b[np.arange(indexes.size), indexes] = 1
         return b
         
-    def save_marketing(self, syn_save):
+    def save_marketing(self, syn_save, syn_y, colnames, step, roc_score):
     # Some fancy indexing to get the actual synthetic data..
         accepted = np.argmax(syn_save[:,16:21], axis=1)
         education = np.argmax(syn_save[:, 22:27], axis=1)
@@ -260,10 +266,11 @@ class PATE_GAN:
         syn_save[:, 27:34] = self.update_array(marital, cols=7)
         syn_save[:, 34:] = self.update_array(country, cols=8)
 
-        df1 = pd.DataFrame(syn_save, columns = df.columns.drop(TARGET_VARIABLE))
-        df2 = pd.DataFrame(syn_y, columns = [TARGET_VARIABLE])
+        df1 = pd.DataFrame(syn_save, columns = colnames)
+        df2 = pd.DataFrame(syn_y, columns = ['Response'])
         df_save = pd.concat([df1,df2], axis =1)
-        df_save.to_csv(f'synthetic_{MODEL_NAME}_{DATASET_NAME}_{TARGET_EPSILON}.csv')
+        print('saving nice!')
+        df_save.to_csv(f'syn/synthetic_pategan_marketing_{step:04}_{roc_score:.3f}.csv')
 
     def save_churn(self, syn_save, syn_y, colnames, step, roc_score):
         geography = np.argmax(syn_save[:,8:11], axis=1)
